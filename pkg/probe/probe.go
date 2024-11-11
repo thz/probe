@@ -19,15 +19,18 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/paraopsde/go-x/pkg/util"
+	proxyproto "github.com/pires/go-proxyproto"
 	"go.uber.org/zap"
 )
 
 type ProbeOptions struct {
 	Endpoint             string
+	ProxyProtocol        string
 	ServerNameIndication string
 }
 
@@ -38,19 +41,21 @@ type Signal struct {
 }
 
 type prober struct {
-	endpoint  string
-	fqdn      string
-	port      string
-	addresses []net.IP
-	conn      net.Conn
-	tlsConn   *tls.Conn
-	sni       string
+	endpoint          string
+	fqdn              string
+	port              string
+	addresses         []net.IP
+	conn              net.Conn
+	tlsConn           *tls.Conn
+	sendProxyProtocol string
+	sni               string
 }
 
 func NewProber(o ProbeOptions) (*prober, error) {
 	p := &prober{
-		endpoint: o.Endpoint,
-		sni:      o.ServerNameIndication,
+		endpoint:          o.Endpoint,
+		sendProxyProtocol: o.ProxyProtocol,
+		sni:               o.ServerNameIndication,
 	}
 	parts := strings.Split(p.endpoint, ":")
 	if len(parts) != 2 {
@@ -106,12 +111,101 @@ func (p *prober) probe(ctx context.Context, signals chan Signal) error {
 	// TCP - connect to first address only
 	p.connectTcp(ctx, signals, 0)
 
+	p.maybeSendProxyProtocolHeaders(ctx, signals)
+
 	// TLS - upgrade to tls
 	p.upgradeTls(ctx, signals)
 
 	close(signals)
 
 	return nil
+}
+
+func (p *prober) sendProxyProtocolV2Headers(ctx context.Context,
+	localIp, remoteIp, localPortStr, remotePortStr string,
+) error {
+	log := util.CtxLogOrPanic(ctx)
+
+	localPort, err := strconv.Atoi(localPortStr)
+	if err != nil {
+		return fmt.Errorf("failed to convert local port to int: %w", err)
+	}
+	remotePort, err := strconv.Atoi(remotePortStr)
+	if err != nil {
+		return fmt.Errorf("failed to convert remote port to int: %w", err)
+	}
+
+	header := &proxyproto.Header{
+		Version:           2,
+		Command:           proxyproto.PROXY,
+		TransportProtocol: proxyproto.TCPv4,
+		SourceAddr: &net.TCPAddr{
+			IP:   net.ParseIP(localIp),
+			Port: localPort,
+		},
+		DestinationAddr: &net.TCPAddr{
+			IP:   net.ParseIP(remoteIp),
+			Port: remotePort,
+		},
+	}
+
+	log.Info("sending proxy protocol v2 headers", zap.Any("header", header))
+	_, err = header.WriteTo(p.conn)
+	if err != nil {
+		return fmt.Errorf("failed to write proxy protocol v2 headers: %w", err)
+	}
+	fmt.Printf("PROXY protocol v2 headers sent.\n")
+	return nil
+}
+
+func (p *prober) maybeSendProxyProtocolHeaders(ctx context.Context, signals chan Signal) {
+	log := util.CtxLogOrPanic(ctx)
+
+	if p.sendProxyProtocol == "" {
+		return
+	}
+
+	if p.conn == nil {
+		log.Info("no tcp connection, skipping proxy protocol headers")
+		return
+	}
+
+	local := p.conn.LocalAddr().String()
+	localIp, localPort, err := net.SplitHostPort(local)
+	if err != nil {
+		signals <- Signal{Path: "PROXYPROTOCOL/ERROR", Error: fmt.Errorf("failed to split local address: %w", err)}
+		return
+	}
+
+	remote := p.conn.RemoteAddr().String()
+	remoteIp, remotePort, err := net.SplitHostPort(remote)
+	if err != nil {
+		signals <- Signal{Path: "PROXYPROTOCOL/ERROR", Error: fmt.Errorf("failed to split remote address: %w", err)}
+		return
+	}
+
+	if p.sendProxyProtocol == "v2" {
+		if err := p.sendProxyProtocolV2Headers(ctx, localIp, remoteIp, localPort, remotePort); err != nil {
+			signals <- Signal{Path: "PROXYPROTOCOL/V2/ERROR", Error: err}
+		} else {
+			signals <- Signal{Path: "PROXYPROTOCOL/V2/SENT", Message: fmt.Sprintf("local: %s:%s, remote: %s:%s", localIp, localPort, remoteIp, remotePort)}
+		}
+		return
+	}
+
+	ppHeader := fmt.Sprintf("PROXY TCP4 %s %s %s %s\r\n",
+		localIp, remoteIp, localPort, remotePort)
+	log.Info("sending proxy protocol headers", zap.String("ppheader", ppHeader))
+	n, err := p.conn.Write([]byte(ppHeader))
+	if n != len(ppHeader) {
+		signals <- Signal{Path: "PROXYPROTOCOL/V1/ERROR", Error: fmt.Errorf("failed to write proxy protocol headers: length mismatch")}
+		return
+	}
+	if err != nil {
+		signals <- Signal{Path: "PROXYPROTOCOL/V1/ERROR", Error: fmt.Errorf("failed to write proxy protocol headers: %w", err)}
+		return
+	}
+	signals <- Signal{Path: "PROXYPROTOCOL/V1/SENT", Message: strings.TrimSpace(ppHeader)}
 }
 
 func (p *prober) upgradeTls(ctx context.Context, signals chan Signal) {
