@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: go build
       run: |
@@ -19,22 +19,45 @@ jobs:
     needs: test
     if: startsWith(github.ref, 'refs/tags')
     steps:
-      - name: Extract Version
-        id: version_step
+      - name: prepare version strings
+        env:
+          DOCKERHUB_ORG: ${{ secrets.DOCKER_USERNAME }}
         run: |
-          echo "##[set-output name=version;]VERSION=${GITHUB_REF#$"refs/tags/v"}"
-          echo "##[set-output name=version_tag;]$GITHUB_REPOSITORY:${GITHUB_REF#$"refs/tags/v"}"
-          echo "##[set-output name=latest_tag;]$GITHUB_REPOSITORY:latest"
+          echo DOCKERHUB_REPOSITORY=${DOCKERHUB_ORG}/${GITHUB_REPOSITORY#*/} >> $GITHUB_ENV
+          echo VERSION_TAG=${GITHUB_REF#$"refs/tags/v"} >> $GITHUB_ENV
 
       - name: Print Version
         run: |
-          echo ${{steps.version_step.outputs.version_tag}}
-          echo ${{steps.version_step.outputs.latest_tag}}
+          echo "Version: $VERSION_TAG"
+          echo "Dockerhub Repository: $DOCKERHUB_REPOSITORY"
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
 
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          registry: https://index.docker.io/v1/
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: |
+            ${{env.DOCKERHUB_REPOSITORY}}:${{env.VERSION_TAG}}
+            ${{env.DOCKERHUB_REPOSITORY}}:latest
+          build-args: |
+            ${{steps.version_step.outputs.version}}
 
