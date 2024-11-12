@@ -1,5 +1,3 @@
-// Copyright 2020 Tobias Hintze
-//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -12,35 +10,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+//go:build darwin
+// +build darwin
+
+package capture
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/spf13/cobra"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/pcap"
 )
 
-func usage() {
-	fmt.Fprintf(os.Stderr, `Usage: probe endpoint-fqdn.example.com.:12345
+func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
+	if s.captureType == CaptureTypePcapFile {
 
-Probe a given endpoint and be verbose about it.
+		handle, err := pcap.OpenOffline(s.ifaceName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open pcap file %s: %w", s.ifaceName, err)
+		}
+		return gopacket.NewPacketSource(handle, handle.LinkType()), nil
 
-Check DNS, TCP, TLS.
-`)
-}
-
-func main() {
-	rootCmd := &cobra.Command{
-		Use:   "probe",
-		Short: `A tool to probe TLS/TCP endpoints`,
 	}
 
-	rootCmd.AddCommand(probeCmd())
-	rootCmd.AddCommand(captureCmd())
-
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
-
+	return nil, fmt.Errorf("unsupported type %s", s.captureType)
 }
