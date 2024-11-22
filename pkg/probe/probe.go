@@ -28,9 +28,17 @@ import (
 	"go.uber.org/zap"
 )
 
+type ProxyProtocolMode string
+
+const (
+	ProxyProtocolDisabled ProxyProtocolMode = ""
+	ProxyProtocolV1       ProxyProtocolMode = "v1"
+	ProxyProtocolV2       ProxyProtocolMode = "v2"
+)
+
 type ProbeOptions struct {
 	Endpoint             string
-	ProxyProtocol        string
+	ProxyProtocolMode    ProxyProtocolMode
 	ServerNameIndication string
 }
 
@@ -47,14 +55,14 @@ type prober struct {
 	addresses         []net.IP
 	conn              net.Conn
 	tlsConn           *tls.Conn
-	sendProxyProtocol string
+	proxyProtocolMode ProxyProtocolMode
 	sni               string
 }
 
 func NewProber(o ProbeOptions) (*prober, error) {
 	p := &prober{
 		endpoint:          o.Endpoint,
-		sendProxyProtocol: o.ProxyProtocol,
+		proxyProtocolMode: o.ProxyProtocolMode,
 		sni:               o.ServerNameIndication,
 	}
 	parts := strings.Split(p.endpoint, ":")
@@ -161,7 +169,7 @@ func (p *prober) sendProxyProtocolV2Headers(ctx context.Context,
 func (p *prober) maybeSendProxyProtocolHeaders(ctx context.Context, signals chan Signal) {
 	log := util.CtxLogOrPanic(ctx)
 
-	if p.sendProxyProtocol == "" {
+	if p.proxyProtocolMode == "" {
 		return
 	}
 
@@ -184,7 +192,7 @@ func (p *prober) maybeSendProxyProtocolHeaders(ctx context.Context, signals chan
 		return
 	}
 
-	if p.sendProxyProtocol == "v2" {
+	if p.proxyProtocolMode == "v2" {
 		if err := p.sendProxyProtocolV2Headers(ctx, localIp, remoteIp, localPort, remotePort); err != nil {
 			signals <- Signal{Path: "PROXYPROTOCOL/V2/ERROR", Error: err}
 		} else {

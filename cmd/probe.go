@@ -55,8 +55,8 @@ setting the SNI (Server Name Indication) for the TLS handshake.`,
 				pp = "v2"
 			}
 			proberOptions := probe.ProbeOptions{
-				Endpoint:      endpoint,
-				ProxyProtocol: pp,
+				Endpoint:          endpoint,
+				ProxyProtocolMode: probe.ProxyProtocolMode(pp),
 			}
 
 			if probeOpts.sni != "" {
