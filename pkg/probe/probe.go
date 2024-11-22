@@ -192,7 +192,7 @@ func (p *prober) maybeSendProxyProtocolHeaders(ctx context.Context, signals chan
 		return
 	}
 
-	if p.proxyProtocolMode == "v2" {
+	if p.proxyProtocolMode == ProxyProtocolV2 {
 		if err := p.sendProxyProtocolV2Headers(ctx, localIp, remoteIp, localPort, remotePort); err != nil {
 			signals <- Signal{Path: "PROXYPROTOCOL/V2/ERROR", Error: err}
 		} else {
