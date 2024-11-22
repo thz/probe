@@ -15,6 +15,7 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -129,10 +130,17 @@ func (p *prober) probe(ctx context.Context, signals chan Signal) error {
 	return nil
 }
 
-func (p *prober) sendProxyProtocolV2Headers(ctx context.Context,
+func (p *prober) sendProxyProtocolHeaders(ctx context.Context,
+	ppMode ProxyProtocolMode,
 	localIp, remoteIp, localPortStr, remotePortStr string,
 ) error {
-	log := util.CtxLogOrPanic(ctx)
+	if ppMode == ProxyProtocolDisabled {
+		return fmt.Errorf("proxy protocol is disabled")
+	}
+
+	log := util.CtxLogOrPanic(ctx).With(
+		zap.String("ppVersion", string(ppMode)),
+	)
 
 	localPort, err := strconv.Atoi(localPortStr)
 	if err != nil {
@@ -144,7 +152,7 @@ func (p *prober) sendProxyProtocolV2Headers(ctx context.Context,
 	}
 
 	header := &proxyproto.Header{
-		Version:           2,
+		Version:           1,
 		Command:           proxyproto.PROXY,
 		TransportProtocol: proxyproto.TCPv4,
 		SourceAddr: &net.TCPAddr{
@@ -157,19 +165,35 @@ func (p *prober) sendProxyProtocolV2Headers(ctx context.Context,
 		},
 	}
 
-	log.Info("sending proxy protocol v2 headers", zap.Any("header", header))
-	_, err = header.WriteTo(p.conn)
-	if err != nil {
-		return fmt.Errorf("failed to write proxy protocol v2 headers: %w", err)
+	if ppMode == ProxyProtocolV2 {
+		header.Version = 2
 	}
-	fmt.Printf("PROXY protocol v2 headers sent.\n")
+	log = log.With(zap.Any("header", header))
+
+	// serialize the header
+	ppBytes, errFormat := header.Format()
+	if errFormat != nil {
+		return fmt.Errorf("failed to serialize proxy protocol %s header: %w", ppMode, errFormat)
+	}
+
+	// ppv1 is human readable
+	if ppMode == ProxyProtocolV1 {
+		log = log.With(zap.String("raw-v1-header", string(ppBytes)))
+	}
+
+	log.Info("sending proxy protocol headers")
+	_, err = bytes.NewBuffer(ppBytes).WriteTo(p.conn)
+	if err != nil {
+		return fmt.Errorf("failed to write proxy protocol %s headers: %w", ppMode, err)
+	}
+	log.Info("sent proxy protocol headers")
 	return nil
 }
 
 func (p *prober) maybeSendProxyProtocolHeaders(ctx context.Context, signals chan Signal) {
 	log := util.CtxLogOrPanic(ctx)
 
-	if p.proxyProtocolMode == "" {
+	if p.proxyProtocolMode == ProxyProtocolDisabled {
 		return
 	}
 
@@ -192,28 +216,14 @@ func (p *prober) maybeSendProxyProtocolHeaders(ctx context.Context, signals chan
 		return
 	}
 
-	if p.proxyProtocolMode == ProxyProtocolV2 {
-		if err := p.sendProxyProtocolV2Headers(ctx, localIp, remoteIp, localPort, remotePort); err != nil {
-			signals <- Signal{Path: "PROXYPROTOCOL/V2/ERROR", Error: err}
-		} else {
-			signals <- Signal{Path: "PROXYPROTOCOL/V2/SENT", Message: fmt.Sprintf("local: %s:%s, remote: %s:%s", localIp, localPort, remoteIp, remotePort)}
-		}
+	if ppErr := p.sendProxyProtocolHeaders(ctx, p.proxyProtocolMode, localIp, remoteIp, localPort, remotePort); ppErr != nil {
+		signals <- Signal{Path: "PROXYPROTOCOL/ERROR", Error: ppErr}
 		return
 	}
-
-	ppHeader := fmt.Sprintf("PROXY TCP4 %s %s %s %s\r\n",
-		localIp, remoteIp, localPort, remotePort)
-	log.Info("sending proxy protocol headers", zap.String("ppheader", ppHeader))
-	n, err := p.conn.Write([]byte(ppHeader))
-	if n != len(ppHeader) {
-		signals <- Signal{Path: "PROXYPROTOCOL/V1/ERROR", Error: fmt.Errorf("failed to write proxy protocol headers: length mismatch")}
-		return
+	signals <- Signal{
+		Path:    "PROXYPROTOCOL/SENT",
+		Message: fmt.Sprintf("version: %s, local: %s, remote: %s", p.proxyProtocolMode, local, remote),
 	}
-	if err != nil {
-		signals <- Signal{Path: "PROXYPROTOCOL/V1/ERROR", Error: fmt.Errorf("failed to write proxy protocol headers: %w", err)}
-		return
-	}
-	signals <- Signal{Path: "PROXYPROTOCOL/V1/SENT", Message: strings.TrimSpace(ppHeader)}
 }
 
 func (p *prober) upgradeTls(ctx context.Context, signals chan Signal) {
