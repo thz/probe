@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/paraopsde/go-x/pkg/util"
@@ -66,12 +65,11 @@ func NewProber(o ProbeOptions) (*prober, error) {
 		proxyProtocolMode: o.ProxyProtocolMode,
 		sni:               o.ServerNameIndication,
 	}
-	parts := strings.Split(p.endpoint, ":")
-	if len(parts) != 2 {
+	var err error
+	p.fqdn, p.port, err = net.SplitHostPort(p.endpoint)
+	if err != nil {
 		return nil, fmt.Errorf("invalid endpoint '%s'", p.endpoint)
 	}
-	p.fqdn = parts[0]
-	p.port = parts[1]
 
 	if p.sni == "" {
 		p.sni = p.fqdn
