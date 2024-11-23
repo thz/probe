@@ -15,19 +15,30 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
-	"strings"
+	"strconv"
 	"sync"
 
 	"github.com/paraopsde/go-x/pkg/util"
+	proxyproto "github.com/pires/go-proxyproto"
 	"go.uber.org/zap"
+)
+
+type ProxyProtocolMode string
+
+const (
+	ProxyProtocolDisabled ProxyProtocolMode = ""
+	ProxyProtocolV1       ProxyProtocolMode = "v1"
+	ProxyProtocolV2       ProxyProtocolMode = "v2"
 )
 
 type ProbeOptions struct {
 	Endpoint             string
+	ProxyProtocolMode    ProxyProtocolMode
 	ServerNameIndication string
 }
 
@@ -38,26 +49,27 @@ type Signal struct {
 }
 
 type prober struct {
-	endpoint  string
-	fqdn      string
-	port      string
-	addresses []net.IP
-	conn      net.Conn
-	tlsConn   *tls.Conn
-	sni       string
+	endpoint          string
+	fqdn              string
+	port              string
+	addresses         []net.IP
+	conn              net.Conn
+	tlsConn           *tls.Conn
+	proxyProtocolMode ProxyProtocolMode
+	sni               string
 }
 
 func NewProber(o ProbeOptions) (*prober, error) {
 	p := &prober{
-		endpoint: o.Endpoint,
-		sni:      o.ServerNameIndication,
+		endpoint:          o.Endpoint,
+		proxyProtocolMode: o.ProxyProtocolMode,
+		sni:               o.ServerNameIndication,
 	}
-	parts := strings.Split(p.endpoint, ":")
-	if len(parts) != 2 {
+	var err error
+	p.fqdn, p.port, err = net.SplitHostPort(p.endpoint)
+	if err != nil {
 		return nil, fmt.Errorf("invalid endpoint '%s'", p.endpoint)
 	}
-	p.fqdn = parts[0]
-	p.port = parts[1]
 
 	if p.sni == "" {
 		p.sni = p.fqdn
@@ -106,12 +118,110 @@ func (p *prober) probe(ctx context.Context, signals chan Signal) error {
 	// TCP - connect to first address only
 	p.connectTcp(ctx, signals, 0)
 
+	p.maybeSendProxyProtocolHeaders(ctx, signals)
+
 	// TLS - upgrade to tls
 	p.upgradeTls(ctx, signals)
 
 	close(signals)
 
 	return nil
+}
+
+func (p *prober) sendProxyProtocolHeaders(ctx context.Context,
+	ppMode ProxyProtocolMode,
+	localIp, remoteIp, localPortStr, remotePortStr string,
+) error {
+	if ppMode == ProxyProtocolDisabled {
+		return fmt.Errorf("proxy protocol is disabled")
+	}
+
+	log := util.CtxLogOrPanic(ctx).With(
+		zap.String("ppVersion", string(ppMode)),
+	)
+
+	localPort, err := strconv.Atoi(localPortStr)
+	if err != nil {
+		return fmt.Errorf("failed to convert local port to int: %w", err)
+	}
+	remotePort, err := strconv.Atoi(remotePortStr)
+	if err != nil {
+		return fmt.Errorf("failed to convert remote port to int: %w", err)
+	}
+
+	header := &proxyproto.Header{
+		Version:           1,
+		Command:           proxyproto.PROXY,
+		TransportProtocol: proxyproto.TCPv4,
+		SourceAddr: &net.TCPAddr{
+			IP:   net.ParseIP(localIp),
+			Port: localPort,
+		},
+		DestinationAddr: &net.TCPAddr{
+			IP:   net.ParseIP(remoteIp),
+			Port: remotePort,
+		},
+	}
+
+	if ppMode == ProxyProtocolV2 {
+		header.Version = 2
+	}
+	log = log.With(zap.Any("header", header))
+
+	// serialize the header
+	ppBytes, errFormat := header.Format()
+	if errFormat != nil {
+		return fmt.Errorf("failed to serialize proxy protocol %s header: %w", ppMode, errFormat)
+	}
+
+	// ppv1 is human readable
+	if ppMode == ProxyProtocolV1 {
+		log = log.With(zap.String("raw-v1-header", string(ppBytes)))
+	}
+
+	log.Info("sending proxy protocol headers")
+	_, err = bytes.NewBuffer(ppBytes).WriteTo(p.conn)
+	if err != nil {
+		return fmt.Errorf("failed to write proxy protocol %s headers: %w", ppMode, err)
+	}
+	log.Info("sent proxy protocol headers")
+	return nil
+}
+
+func (p *prober) maybeSendProxyProtocolHeaders(ctx context.Context, signals chan Signal) {
+	log := util.CtxLogOrPanic(ctx)
+
+	if p.proxyProtocolMode == ProxyProtocolDisabled {
+		return
+	}
+
+	if p.conn == nil {
+		log.Info("no tcp connection, skipping proxy protocol headers")
+		return
+	}
+
+	local := p.conn.LocalAddr().String()
+	localIp, localPort, err := net.SplitHostPort(local)
+	if err != nil {
+		signals <- Signal{Path: "PROXYPROTOCOL/ERROR", Error: fmt.Errorf("failed to split local address: %w", err)}
+		return
+	}
+
+	remote := p.conn.RemoteAddr().String()
+	remoteIp, remotePort, err := net.SplitHostPort(remote)
+	if err != nil {
+		signals <- Signal{Path: "PROXYPROTOCOL/ERROR", Error: fmt.Errorf("failed to split remote address: %w", err)}
+		return
+	}
+
+	if ppErr := p.sendProxyProtocolHeaders(ctx, p.proxyProtocolMode, localIp, remoteIp, localPort, remotePort); ppErr != nil {
+		signals <- Signal{Path: "PROXYPROTOCOL/ERROR", Error: ppErr}
+		return
+	}
+	signals <- Signal{
+		Path:    "PROXYPROTOCOL/SENT",
+		Message: fmt.Sprintf("version: %s, local: %s, remote: %s", p.proxyProtocolMode, local, remote),
+	}
 }
 
 func (p *prober) upgradeTls(ctx context.Context, signals chan Signal) {

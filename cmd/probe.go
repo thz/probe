@@ -26,26 +26,37 @@ import (
 )
 
 type probeOptions struct {
-	verbose bool
-	sni     string
+	verbose    bool
+	ppv1, ppv2 bool
+	sni        string
 }
 
 var probeOpts probeOptions
 
 func probeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "probe [--verbose] [--sni server-name] endpoint",
+		Use:   "probe [--verbose] [--proxy-protocol-v1|--proxy-protocol-v2] [--sni server-name] endpoint",
 		Short: "Probe a given endpoint",
 		Long: `Probe will open a TLS connection to an endpoint.
-It will report details on DNS resolving (chain of CNAMEs / A records).`,
+It will report details on DNS resolving (chain of CNAMEs / A records).
+The command also supports sending proxy protocol headers (v1/v2) and
+setting the SNI (Server Name Indication) for the TLS handshake.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return fmt.Errorf("endpoint expected as argument")
 			}
 			endpoint := args[0]
 
+			var ppMode probe.ProxyProtocolMode
+			if probeOpts.ppv1 {
+				ppMode = probe.ProxyProtocolV1
+			}
+			if probeOpts.ppv2 {
+				ppMode = probe.ProxyProtocolV2
+			}
 			proberOptions := probe.ProbeOptions{
-				Endpoint: endpoint,
+				Endpoint:          endpoint,
+				ProxyProtocolMode: probe.ProxyProtocolMode(ppMode),
 			}
 
 			if probeOpts.sni != "" {
@@ -77,6 +88,8 @@ It will report details on DNS resolving (chain of CNAMEs / A records).`,
 	}
 
 	cmd.Flags().BoolVar(&probeOpts.verbose, "verbose", false, "be verbose, output logs")
+	cmd.Flags().BoolVar(&probeOpts.ppv1, "proxy-protocol-v1", false, "send proxy protocol v1 headers")
+	cmd.Flags().BoolVar(&probeOpts.ppv2, "proxy-protocol-v2", false, "send proxy protocol v2 headers")
 	cmd.Flags().StringVar(&probeOpts.sni, "sni", "", "set SNI for TLS handshake (defaults to endpoint host)")
 
 	return cmd
