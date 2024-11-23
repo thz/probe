@@ -68,7 +68,8 @@ func NewProber(o ProbeOptions) (*prober, error) {
 	var err error
 	p.fqdn, p.port, err = net.SplitHostPort(p.endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("invalid endpoint '%s'", p.endpoint)
+		return nil, fmt.Errorf("%w: bad endpoint syntax in '%s'",
+			ErrInvalidArgument, p.endpoint)
 	}
 
 	if p.sni == "" {
@@ -133,7 +134,7 @@ func (p *prober) sendProxyProtocolHeaders(ctx context.Context,
 	localIp, remoteIp, localPortStr, remotePortStr string,
 ) error {
 	if ppMode == ProxyProtocolDisabled {
-		return fmt.Errorf("proxy protocol is disabled")
+		return ErrProxyProtocolDisabled
 	}
 
 	log := util.CtxLogOrPanic(ctx).With(
@@ -142,11 +143,11 @@ func (p *prober) sendProxyProtocolHeaders(ctx context.Context,
 
 	localPort, err := strconv.Atoi(localPortStr)
 	if err != nil {
-		return fmt.Errorf("failed to convert local port to int: %w", err)
+		return fmt.Errorf("%w: invalid local port", ErrInvalidArgument)
 	}
 	remotePort, err := strconv.Atoi(remotePortStr)
 	if err != nil {
-		return fmt.Errorf("failed to convert remote port to int: %w", err)
+		return fmt.Errorf("%w: invalid remote port", ErrInvalidArgument)
 	}
 
 	header := &proxyproto.Header{
@@ -171,7 +172,7 @@ func (p *prober) sendProxyProtocolHeaders(ctx context.Context,
 	// serialize the header
 	ppBytes, errFormat := header.Format()
 	if errFormat != nil {
-		return fmt.Errorf("failed to serialize proxy protocol %s header: %w", ppMode, errFormat)
+		return fmt.Errorf("%w: failed to serialize %s header: %s", ErrProxyProtocol, ppMode, errFormat.Error())
 	}
 
 	// ppv1 is human readable
@@ -182,7 +183,8 @@ func (p *prober) sendProxyProtocolHeaders(ctx context.Context,
 	log.Info("sending proxy protocol headers")
 	_, err = bytes.NewBuffer(ppBytes).WriteTo(p.conn)
 	if err != nil {
-		return fmt.Errorf("failed to write proxy protocol %s headers: %w", ppMode, err)
+		return fmt.Errorf("%w: failed to write proxy protocol %s headers: %s",
+			ErrProxyProtocol, ppMode, err.Error())
 	}
 	log.Info("sent proxy protocol headers")
 	return nil
@@ -203,14 +205,20 @@ func (p *prober) maybeSendProxyProtocolHeaders(ctx context.Context, signals chan
 	local := p.conn.LocalAddr().String()
 	localIp, localPort, err := net.SplitHostPort(local)
 	if err != nil {
-		signals <- Signal{Path: "PROXYPROTOCOL/ERROR", Error: fmt.Errorf("failed to split local address: %w", err)}
+		signals <- Signal{
+			Path:  "PROXYPROTOCOL/ERROR",
+			Error: fmt.Errorf("%w: cannot parse local address '%s'", ErrInvalidArgument, local),
+		}
 		return
 	}
 
 	remote := p.conn.RemoteAddr().String()
 	remoteIp, remotePort, err := net.SplitHostPort(remote)
 	if err != nil {
-		signals <- Signal{Path: "PROXYPROTOCOL/ERROR", Error: fmt.Errorf("failed to split remote address: %w", err)}
+		signals <- Signal{
+			Path:  "PROXYPROTOCOL/ERROR",
+			Error: fmt.Errorf("%w: cannot parse remote address '%s'", ErrInvalidArgument, remote),
+		}
 		return
 	}
 
@@ -234,12 +242,15 @@ func (p *prober) upgradeTls(ctx context.Context, signals chan Signal) {
 
 	log.Info("upgrading to tls")
 	p.tlsConn = tls.Client(p.conn, &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: true, //nolint:gosec
 		ServerName:         p.sni,
 	})
 
 	if err := p.tlsConn.HandshakeContext(ctx); err != nil {
-		signals <- Signal{Path: "TLS/ERROR", Error: fmt.Errorf("failed to handshake: %w", err)}
+		signals <- Signal{
+			Path:  "TLS/ERROR",
+			Error: fmt.Errorf("%w: TLS handshake failed: %s", ErrProtocolViolation, err.Error()),
+		}
 		return
 	}
 
@@ -262,7 +273,9 @@ func (p *prober) connectTcp(ctx context.Context, signals chan Signal, index int)
 	dialer := &net.Dialer{}
 	p.conn, err = dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%s", dst, p.port))
 	if err != nil {
-		signals <- Signal{Path: "TCP/ERROR", Error: fmt.Errorf("failed to dial tcp: %w", err)}
+		signals <- Signal{
+			Path:  "TCP/ERROR",
+			Error: fmt.Errorf("%w: failed to connect: %s", ErrTCP, err.Error())}
 		return
 	}
 
@@ -291,7 +304,10 @@ func (p *prober) resolve(ctx context.Context, signals chan Signal) {
 			return
 		}
 		if cname == "" {
-			signals <- Signal{Path: "RESOLVE/A/ERROR", Error: fmt.Errorf("empty cname from '%s'", name)}
+			signals <- Signal{
+				Path:  "RESOLVE/A/ERROR",
+				Error: fmt.Errorf("%w: empty cname from '%s'", ErrUnexpectedResponse, name),
+			}
 			return
 		}
 		if cname == name || cname == name+"." {
@@ -308,7 +324,7 @@ func (p *prober) resolve(ctx context.Context, signals chan Signal) {
 	if err != nil {
 		signals <- Signal{
 			Path:  "RESOLVE/A/ERROR",
-			Error: fmt.Errorf("failed to resolve IP for '%s': %w", name, err),
+			Error: fmt.Errorf("%w: failed to resolve IP for '%s': %s", ErrResolve, name, err.Error()),
 		}
 		return
 	}

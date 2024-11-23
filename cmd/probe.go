@@ -33,6 +33,10 @@ type probeOptions struct {
 
 var probeOpts probeOptions
 
+var (
+	errInvalidArgument = fmt.Errorf("invalid argument")
+)
+
 func probeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "probe [--verbose] [--proxy-protocol-v1|--proxy-protocol-v2] [--sni server-name] endpoint",
@@ -43,7 +47,7 @@ The command also supports sending proxy protocol headers (v1/v2) and
 setting the SNI (Server Name Indication) for the TLS handshake.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return fmt.Errorf("endpoint expected as argument")
+				return fmt.Errorf("%w: no endpoint provided", errInvalidArgument)
 			}
 			endpoint := args[0]
 

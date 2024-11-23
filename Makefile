@@ -1,3 +1,5 @@
+.PHONE: default
+default: lint test
 
 .PHONY: test
 test:
@@ -15,3 +17,10 @@ probe-linux-amd64:
 
 probe-linux-arm64:
 	GOARCH=arm64 GOOS=linux go build -o $@ ./cmd
+
+.PHONY: lint
+lint:
+	docker run --rm -v $(shell pwd):/app \
+		-v ~/.cache/golangci-lint/v1.62.0:/root/.cache \
+		-w /app golangci/golangci-lint:v1.62.0 \
+		golangci-lint run -v
