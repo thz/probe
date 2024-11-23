@@ -1,0 +1,10 @@
+linters:
+  presets:
+    - bugs
+    - error
+  enable:
+    - errname
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - (*go.uber.org/zap.Logger).Sync

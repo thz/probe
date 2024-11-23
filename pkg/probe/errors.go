@@ -12,22 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package probe
 
-import (
-	"os"
+import "errors"
 
-	"github.com/spf13/cobra"
+var (
+	ErrProxyProtocolDisabled = errors.New("proxy protocol disabled")
+	ErrInvalidArgument       = errors.New("invalid argument")
+	ErrUnexpectedResponse    = errors.New("unexpected response")
+	ErrProtocolViolation     = errors.New("protocol violation")
+	ErrResolve               = errors.New("name resolution error")
+	ErrProxyProtocol         = errors.New("proxy protocol error")
+	ErrTCP                   = errors.New("TCP error")
 )
-
-func main() {
-	rootCmd := &cobra.Command{
-		Use:   "probe",
-		Short: `A tool to probe TLS/TCP endpoints`,
-	}
-
-	rootCmd.AddCommand(probeCmd())
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
-}
