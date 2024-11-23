@@ -1,8 +1,8 @@
 # thz/probe -- Probe TCP/TLS endpoints
 
-## Why is the TLS connection to foo.example.com:12345 failing?
+## Why this tool?
 
-I used to:
+To diagnose a failing TLS connection to foo.example.com:12345, I used to:
 
  - check DNS resolving
  - check TCP establishment
@@ -26,3 +26,23 @@ Use of the docker container is very similar:
 
 You might want to consider adding `--network host` to the `docker run` command to avoid additional network overhead (NAT) from the container network namespace.
 
+In addition to that, it should also be usable as a library to be integrated into other tools.
+
+## More features / exmaples
+
+### Explicit ServerName (SNI header)
+
+```
+% ./probe probe --sni foo.example.com example.com:12345
+```
+
+This will use `foo.example.com` as server name indication (SNI) header during the TLS handshake (ClientHello).
+
+### Proxy Protocol Support
+
+```
+% ./probe probe --proxy-protocol-v1 foo.example.com:12345
+% ./probe probe --proxy-protocol-v2 foo.example.com:12345
+```
+
+This will send a PROXY protocol header after successful TCP connection establishment. See https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt for details.
