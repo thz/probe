@@ -72,7 +72,7 @@ jobs:
             ghcr.io/${{ github.repository }}:latest
           build-args: |
             ${{steps.version_step.outputs.version}}
-          cache-from: type=registry,ref=${{ github.repository }}:buildcache
-          cache-to: type=registry,ref=${{ github.repository }}:buildcache,mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
 
 
