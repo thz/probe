@@ -6,6 +6,8 @@ RUN env CGO_ENABLED=1 go build -o probe ./cmd
 
 FROM debian:bookworm-slim AS run-stage
 
+LABEL org.opencontainers.image.source=https://github.com/thz/probe
+
 # make the container slightly more useful for diagostics
 RUN apt-get update && apt-get install -qq -y \
 	inetutils-telnet \
