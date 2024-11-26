@@ -6,7 +6,7 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 ADD . /go/src/github.com/thz/probe
 WORKDIR /go/src/github.com/thz/probe
-RUN env CGO_ENABLED=1 go build -o probe ./cmd
+RUN --mount=type=cache,target="/root/.cache/go-build" env CGO_ENABLED=1 go build -o probe ./cmd
 
 FROM debian:bookworm-slim AS run-stage
 
