@@ -15,10 +15,20 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 )
+
+func usage() {
+	fmt.Fprintf(os.Stderr, `Usage: probe endpoint-fqdn.example.com.:12345
+
+Probe a given endpoint and be verbose about it.
+
+Check DNS, TCP, TLS.
+`)
+}
 
 func main() {
 	rootCmd := &cobra.Command{

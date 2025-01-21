@@ -28,7 +28,7 @@ You might want to consider adding `--network host` to the `docker run` command t
 
 In addition to that, it should also be usable as a library to be integrated into other tools.
 
-## More features / exmaples
+## More features / examples
 
 ### Explicit ServerName (SNI header)
 

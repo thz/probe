@@ -275,7 +275,8 @@ func (p *prober) connectTcp(ctx context.Context, signals chan Signal, index int)
 	if err != nil {
 		signals <- Signal{
 			Path:  "TCP/ERROR",
-			Error: fmt.Errorf("%w: failed to connect: %s", ErrTCP, err.Error())}
+			Error: fmt.Errorf("%w: failed to connect: %s", ErrTCP, err.Error()),
+		}
 		return
 	}
 

@@ -1,4 +1,4 @@
-.PHONE: default
+.PHONY: default
 default: lint test
 
 .PHONY: test
