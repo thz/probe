@@ -33,7 +33,10 @@ func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
 			return nil, fmt.Errorf("failed to open interface %s: %w", s.ifaceName, err)
 		}
 		if s.bpfFilter != "" {
-			pcapHandle.SetBPFFilter(s.bpfFilter)
+			err = pcapHandle.SetBPFFilter(s.bpfFilter)
+			if err != nil {
+				return nil, fmt.Errorf("failed to set bpf filter %s: %w", s.bpfFilter, err)
+			}
 		}
 		s.packetSource = gopacket.NewPacketSource(pcapHandle, pcapHandle.LinkType())
 	case "afpacket":
@@ -48,7 +51,10 @@ func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to compile bpf filter %s: %w", s.bpfFilter, err)
 			}
-			afpHandle.SetBPF(bpfInstr)
+			err = afpHandle.SetBPF(bpfInstr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to set bpf filter %s: %w", s.bpfFilter, err)
+			}
 		}
 		return gopacket.NewPacketSource(afpHandle, layers.LinkTypeEthernet), nil
 	}

@@ -158,7 +158,7 @@ func (s *stream) run(ctx context.Context, signals chan Signal) {
 
 	// peek into the tls handshake
 	helloServerName, clientHelloEncountered := "", false
-	_ = tls.Server(readOnlyConn{reader: buf}, &tls.Config{
+	_ = tls.Server(readOnlyConn{reader: buf}, &tls.Config{ //nolint:gosec
 		GetConfigForClient: func(helloInfo *tls.ClientHelloInfo) (*tls.Config, error) {
 			if helloInfo != nil {
 				helloServerName = helloInfo.ServerName
