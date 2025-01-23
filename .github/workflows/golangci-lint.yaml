@@ -22,6 +22,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install development libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -qq -y libpcap-dev
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
