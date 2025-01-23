@@ -16,6 +16,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -138,7 +139,7 @@ func (s *stream) run(ctx context.Context, signals chan Signal) {
 	defer drainReader(buf)
 
 	ppHeader, errPp := proxyproto.Read(buf)
-	if errPp != nil && errPp != proxyproto.ErrNoProxyProtocol {
+	if errPp != nil && !errors.Is(errPp, proxyproto.ErrNoProxyProtocol) {
 		log.Info("failed to read PROXY header", zap.Error(errPp))
 		signals <- Signal{Type: "PROXYPROTOCOL/ERR", Error: errPp}
 		return
@@ -183,7 +184,7 @@ func (s *stream) run(ctx context.Context, signals chan Signal) {
 func drainReader(r io.Reader) {
 	for {
 		_, err := tcpreader.DiscardBytesToFirstError(r)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return
 		}
 		if err == nil {
@@ -254,7 +255,7 @@ type readOnlyConn struct {
 	reader io.Reader
 }
 
-func (conn readOnlyConn) Read(p []byte) (int, error)         { return conn.reader.Read(p) }
+func (conn readOnlyConn) Read(p []byte) (int, error)         { return conn.reader.Read(p) } //nolint:wrapcheck
 func (conn readOnlyConn) Write(p []byte) (int, error)        { return 0, io.ErrClosedPipe }
 func (conn readOnlyConn) Close() error                       { return nil }
 func (conn readOnlyConn) LocalAddr() net.Addr                { return nil }

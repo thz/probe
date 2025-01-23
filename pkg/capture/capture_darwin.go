@@ -22,6 +22,8 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
+var errInvalidConfig = fmt.Errorf("invalid config")
+
 func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
 	if s.captureType == CaptureTypePcapFile {
 
@@ -33,5 +35,5 @@ func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
 
 	}
 
-	return nil, fmt.Errorf("unsupported type %s", s.captureType)
+	return nil, fmt.Errorf("%w: unsupported type %s", errInvalidConfig, s.captureType)
 }
