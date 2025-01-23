@@ -25,6 +25,8 @@ import (
 	"golang.org/x/net/bpf"
 )
 
+var errInvalidConfig = fmt.Errorf("invalid config")
+
 func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
 	switch s.captureType {
 	case "pcap":
@@ -59,7 +61,7 @@ func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
 		return gopacket.NewPacketSource(afpHandle, layers.LinkTypeEthernet), nil
 	}
 
-	return nil, fmt.Errorf("unsupported type %s", s.captureType)
+	return nil, fmt.Errorf("%w: unsupported type %s", errInvalidConfig, s.captureType)
 }
 
 func compilePfg(filter string, snaplen int) ([]bpf.RawInstruction, error) {
