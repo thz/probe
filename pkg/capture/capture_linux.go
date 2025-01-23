@@ -28,7 +28,7 @@ import (
 var errInvalidConfig = fmt.Errorf("invalid config")
 
 func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
-	switch s.captureType {
+	switch s.captureType { //nolint:exhaustive
 	case "pcap":
 		pcapHandle, err := pcap.OpenLive(s.ifaceName, 2000, false, pcap.BlockForever)
 		if err != nil {
@@ -67,7 +67,7 @@ func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
 func compilePfg(filter string, snaplen int) ([]bpf.RawInstruction, error) {
 	pcapBPF, err := pcap.CompileBPFFilter(layers.LinkTypeEthernet, snaplen, filter)
 	if err != nil {
-		return nil, err
+		return nil, err //nolint:wrapcheck
 	}
 	bpfIns := []bpf.RawInstruction{}
 	for _, ins := range pcapBPF {
