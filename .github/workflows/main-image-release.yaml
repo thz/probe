@@ -9,6 +9,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install development libraries
+      run: |
+        sudo apt-get update
+        sudo apt-get install -qq -y libpcap-dev
+
     - name: go build
       run: |
         go build ./...
