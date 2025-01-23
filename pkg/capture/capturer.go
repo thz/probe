@@ -46,6 +46,7 @@ type Signal struct {
 	Type    string
 	Message string
 	Error   error
+	FlowID  string
 
 	TLSServerName string
 
@@ -141,7 +142,7 @@ func (s *stream) run(ctx context.Context, signals chan Signal) {
 	ppHeader, errPp := proxyproto.Read(buf)
 	if errPp != nil && !errors.Is(errPp, proxyproto.ErrNoProxyProtocol) {
 		log.Info("failed to read PROXY header", zap.Error(errPp))
-		signals <- Signal{Type: "PROXYPROTOCOL/ERR", Error: errPp}
+		signals <- Signal{FlowID: s.id, Type: "PROXYPROTOCOL/ERR", Error: errPp}
 		return
 	}
 
@@ -149,8 +150,9 @@ func (s *stream) run(ctx context.Context, signals chan Signal) {
 		ppVer := proxyProtocolVersions[ppHeader.Version]
 		log.Info("Encountered PROXY protocol", zap.Any("header", ppHeader), zap.String("pp-version", ppVer))
 		signals <- Signal{
+			FlowID:            s.id,
 			Type:              "PROXYPROTOCOL/" + ppVer,
-			Message:           "flow: " + s.id + ", local: " + ppHeader.SourceAddr.String() + ", remote: " + ppHeader.DestinationAddr.String(),
+			Message:           "PROXY protocol header observed",
 			PPSourceAddr:      ppHeader.SourceAddr,
 			PPDestinationAddr: ppHeader.DestinationAddr,
 			PPVersion:         ppVer,
@@ -172,12 +174,11 @@ func (s *stream) run(ctx context.Context, signals chan Signal) {
 	if clientHelloEncountered {
 		log.Info("Encountered TLS handshake", zap.String("SNI", helloServerName))
 		signals <- Signal{
+			FlowID:        s.id,
 			Type:          "TLS/CLIENTHELLO/SNI",
-			Message:       s.id + " " + helloServerName,
+			Message:       "SNI servername observed",
 			TLSServerName: helloServerName,
 		}
-	} else {
-		log.Info("Encountered non-TLS connection")
 	}
 }
 
