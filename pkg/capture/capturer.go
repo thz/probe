@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,11 +43,30 @@ const (
 	CaptureTypeAfpacket CaptureType = "afpacket"
 )
 
+type SignalType int
+
+const (
+	SignalTypeProxyProtocolHeader SignalType = iota
+	SignalTypeTLSClientHello      SignalType = iota
+	SignalTypeError               SignalType = iota
+)
+
+func (st SignalType) String() string {
+	switch st {
+	case SignalTypeProxyProtocolHeader:
+		return "PROXY_PROTOCOL_HEADER"
+	case SignalTypeTLSClientHello:
+		return "TLS_CLIENT_HELLO"
+	case SignalTypeError:
+		return "ERROR"
+	}
+	return "UNKNOWN"
+}
+
 type Signal struct {
-	Type    string
-	Message string
-	Error   error
-	FlowID  string
+	Type   SignalType
+	Error  error
+	FlowID string
 
 	TLSServerName string
 
@@ -59,7 +79,27 @@ func (s Signal) String() string {
 	if s.Error != nil {
 		return fmt.Sprintf("%s FAILED: %v", s.Type, s.Error)
 	}
-	return fmt.Sprintf("%s %s", s.Type, s.Message)
+	details := []string{s.Type.String()}
+	if s.FlowID != "" {
+		details = append(details, fmt.Sprintf("FlowID='%s'", s.FlowID))
+	}
+	if s.TLSServerName != "" {
+		details = append(details, fmt.Sprintf("TLSServerName='%s'", s.TLSServerName))
+	}
+	if s.PPSourceAddr != nil {
+		details = append(details, fmt.Sprintf("PPSourceAddr='%s'", s.PPSourceAddr.String()))
+	}
+	if s.PPDestinationAddr != nil {
+		details = append(details, fmt.Sprintf("PPDestinationAddr='%s'", s.PPDestinationAddr.String()))
+	}
+	if s.PPVersion != "" {
+		details = append(details, fmt.Sprintf("PPVersion='%s'", s.PPVersion))
+	}
+	if s.Error != nil {
+		details = append(details, fmt.Sprintf("Error='%s'", s.Error.Error()))
+	}
+
+	return strings.Join(details, " ")
 }
 
 type SNICapturer struct {
@@ -142,7 +182,11 @@ func (s *stream) run(ctx context.Context, signals chan Signal) {
 	ppHeader, errPp := proxyproto.Read(buf)
 	if errPp != nil && !errors.Is(errPp, proxyproto.ErrNoProxyProtocol) {
 		log.Info("failed to read PROXY header", zap.Error(errPp))
-		signals <- Signal{FlowID: s.id, Type: "PROXYPROTOCOL/ERR", Error: errPp}
+		signals <- Signal{
+			FlowID: s.id,
+			Type:   SignalTypeError,
+			Error:  errPp,
+		}
 		return
 	}
 
@@ -151,8 +195,7 @@ func (s *stream) run(ctx context.Context, signals chan Signal) {
 		log.Info("Encountered PROXY protocol", zap.Any("header", ppHeader), zap.String("pp-version", ppVer))
 		signals <- Signal{
 			FlowID:            s.id,
-			Type:              "PROXYPROTOCOL/" + ppVer,
-			Message:           "PROXY protocol header observed",
+			Type:              SignalTypeProxyProtocolHeader,
 			PPSourceAddr:      ppHeader.SourceAddr,
 			PPDestinationAddr: ppHeader.DestinationAddr,
 			PPVersion:         ppVer,
@@ -175,8 +218,7 @@ func (s *stream) run(ctx context.Context, signals chan Signal) {
 		log.Info("Encountered TLS handshake", zap.String("SNI", helloServerName))
 		signals <- Signal{
 			FlowID:        s.id,
-			Type:          "TLS/CLIENTHELLO/SNI",
-			Message:       "SNI servername observed",
+			Type:          SignalTypeTLSClientHello,
 			TLSServerName: helloServerName,
 		}
 	}
