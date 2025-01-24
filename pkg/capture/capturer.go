@@ -82,16 +82,16 @@ func (s Signal) String() string {
 	if s.FlowID != "" {
 		details = append(details, fmt.Sprintf("FlowID='%s'", s.FlowID))
 	}
-	if s.TLSServerName != "" {
+	if s.TLSServerName != "" || s.Type == SignalTypeTLSClientHello {
 		details = append(details, fmt.Sprintf("TLSServerName='%s'", s.TLSServerName))
 	}
-	if s.PPSourceAddr != nil {
+	if s.PPSourceAddr != nil || s.Type == SignalTypeProxyProtocolHeader {
 		details = append(details, fmt.Sprintf("PPSourceAddr='%s'", s.PPSourceAddr.String()))
 	}
-	if s.PPDestinationAddr != nil {
+	if s.PPDestinationAddr != nil || s.Type == SignalTypeProxyProtocolHeader {
 		details = append(details, fmt.Sprintf("PPDestinationAddr='%s'", s.PPDestinationAddr.String()))
 	}
-	if s.PPVersion != "" {
+	if s.PPVersion != "" || s.Type == SignalTypeProxyProtocolHeader {
 		details = append(details, fmt.Sprintf("PPVersion='%s'", s.PPVersion))
 	}
 	if s.Error != nil {
