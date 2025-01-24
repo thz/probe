@@ -28,7 +28,6 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/tcpassembly"
 	"github.com/google/gopacket/tcpassembly/tcpreader"
-	"github.com/paraopsde/go-x/pkg/util"
 	proxyproto "github.com/pires/go-proxyproto"
 	"go.uber.org/zap"
 )
@@ -251,10 +250,8 @@ func (s *SNICapturer) Output() <-chan Signal {
 	return s.output
 }
 
-func (s *SNICapturer) Start(ctx context.Context) error {
+func (s *SNICapturer) Start(ctx context.Context, log *zap.Logger) error {
 	var err error
-
-	log := util.CtxLogOrPanic(ctx)
 
 	s.packetSource, err = s.acquireCaptureHandle()
 	if err != nil {

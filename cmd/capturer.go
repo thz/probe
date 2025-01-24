@@ -54,11 +54,10 @@ observed in a client-hello of TLS handshakes.`,
 			} else {
 				logger = zap.NewNop()
 			}
-			ctx = util.CtxWithLog(ctx, logger)
 
 			capturer := capture.NewSNICapturer(capture.CaptureType(captureOpts.captureType), captureOpts.iface, captureOpts.bpfFilter)
 
-			if err := capturer.Start(ctx); err != nil {
+			if err := capturer.Start(ctx, logger); err != nil {
 				return fmt.Errorf("failed to start capturer: %w", err)
 			}
 			for x := range capturer.Output() {
