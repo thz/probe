@@ -37,7 +37,10 @@ func main() {
 	}
 
 	rootCmd.AddCommand(probeCmd())
+	rootCmd.AddCommand(captureCmd())
+
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+
 }

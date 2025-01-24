@@ -4,6 +4,8 @@ LABEL org.opencontainers.image.source="https://github.com/thz/probe"
 LABEL org.opencontainers.image.description="thz/probe a DNS,TCP,TLS prober"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
+RUN apt-get update && apt-get install -qq -y libpcap-dev
+
 ADD . /go/src/github.com/thz/probe
 WORKDIR /go/src/github.com/thz/probe
 
