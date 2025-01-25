@@ -10,9 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build darwin
-// +build darwin
-
 package capture
 
 import (
@@ -25,14 +22,31 @@ import (
 var errInvalidConfig = fmt.Errorf("invalid config")
 
 func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
-	if s.captureType == CaptureTypePcapFile {
-
+	switch s.captureType {
+	case CaptureTypePcap:
+		pcapHandle, err := pcap.OpenLive(s.ifaceName, 2000, false, pcap.BlockForever)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open interface %s: %w", s.ifaceName, err)
+		}
+		if s.bpfFilter != "" {
+			err = pcapHandle.SetBPFFilter(s.bpfFilter)
+			if err != nil {
+				return nil, fmt.Errorf("failed to set bpf filter %s: %w", s.bpfFilter, err)
+			}
+		}
+		return gopacket.NewPacketSource(pcapHandle, pcapHandle.LinkType()), nil
+	case CaptureTypePcapFile:
 		handle, err := pcap.OpenOffline(s.ifaceName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open pcap file %s: %w", s.ifaceName, err)
 		}
+		if s.bpfFilter != "" {
+			err = handle.SetBPFFilter(s.bpfFilter)
+			if err != nil {
+				return nil, fmt.Errorf("failed to set bpf filter %s: %w", s.bpfFilter, err)
+			}
+		}
 		return gopacket.NewPacketSource(handle, handle.LinkType()), nil
-
 	}
 
 	return nil, fmt.Errorf("%w: unsupported type %s", errInvalidConfig, s.captureType)
