@@ -12,6 +12,8 @@ I prefered `drill` (similar to `dig`) to check DNS resolving, `telnet` to check 
 
 To smoothen the process, I wrote `thz/probe` to do all these checks in one go and provide exactly the relevant details for every step.
 
+## Probe Usage
+
 ```
 % ./probe probe foo.example.com:12345
 RESOLVE/A 192.0.2.100
@@ -21,14 +23,12 @@ TLS/ESTABLISHED peer-subject: CN=*.example.com
 
 Use of the docker container is very similar:
 ```
-% docker run --rm -ti thz/probe probe google.com:443
+% docker run --rm -ti thzpub/probe probe google.com:443
 ```
 
 You might want to consider adding `--network host` to the `docker run` command to avoid additional network overhead (NAT) from the container network namespace.
 
 In addition to that, it should also be usable as a library to be integrated into other tools.
-
-## More features / examples
 
 ### Explicit ServerName (SNI header)
 
@@ -46,3 +46,12 @@ This will use `foo.example.com` as server name indication (SNI) header during th
 ```
 
 This will send a PROXY protocol header after successful TCP connection establishment. See https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt for details.
+
+
+## Capture Usage
+
+The capture command will listen on a network interface and print details about observed TCP connections.
+
+```
+% ./probe capture --iface eth0 --bpf "dst port 443"
+```

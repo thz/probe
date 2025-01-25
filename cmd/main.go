@@ -22,18 +22,22 @@ import (
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `Usage: probe endpoint-fqdn.example.com.:12345
+	fmt.Fprintf(os.Stderr, `Usage:
 
-Probe a given endpoint and be verbose about it.
+	# Probe a given endpoint and be verbose about it.
+	probe [--sni example.com] endpoint-fqdn.example.com.:12345
 
-Check DNS, TCP, TLS.
+	# Capture packets on a given interface and be verbose about it.
+	capture --iface eth0 --bpf "port 12345"
+
+The focus of that verbosity is DNS, TCP, TLS, SNI, ProxyProtocol.
 `)
 }
 
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "probe",
-		Short: `A tool to probe TLS/TCP endpoints`,
+		Short: `A tool to diagnose (probe, capture) TLS/TCP traffic.`,
 	}
 
 	rootCmd.AddCommand(probeCmd())
@@ -42,5 +46,4 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
-
 }

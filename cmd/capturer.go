@@ -44,13 +44,9 @@ observed in a client-hello of TLS handshakes.`,
 			ctx, cancel := context.WithTimeout(context.Background(), 86400*time.Second)
 			defer cancel()
 
-			logLevel := zapcore.InfoLevel
-			if captureOpts.verbose {
-				logLevel = zapcore.DebugLevel
-			}
 			var logger *zap.Logger
 			if captureOpts.verbose {
-				logger = util.NewLoggerWithLevel(logLevel).WithOptions(zap.WithCaller(false))
+				logger = util.NewLoggerWithLevel(zapcore.DebugLevel).WithOptions(zap.WithCaller(false))
 			} else {
 				logger = zap.NewNop()
 			}
