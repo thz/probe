@@ -47,6 +47,8 @@ func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
 			}
 		}
 		return gopacket.NewPacketSource(handle, handle.LinkType()), nil
+	case CaptureTypeAfpacket:
+		return s.acquireCaptureHandle_afpacket()
 	default:
 		return nil, fmt.Errorf("%w: unsupported type %s", errInvalidConfig, s.captureType)
 	}
