@@ -19,21 +19,8 @@ import (
 	"fmt"
 
 	"github.com/google/gopacket"
-	"github.com/google/gopacket/pcap"
 )
 
-var errInvalidConfig = fmt.Errorf("invalid config")
-
-func (s *SNICapturer) acquireCaptureHandle() (*gopacket.PacketSource, error) {
-	if s.captureType == CaptureTypePcapFile {
-
-		handle, err := pcap.OpenOffline(s.ifaceName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open pcap file %s: %w", s.ifaceName, err)
-		}
-		return gopacket.NewPacketSource(handle, handle.LinkType()), nil
-
-	}
-
-	return nil, fmt.Errorf("%w: unsupported type %s", errInvalidConfig, s.captureType)
+func (s *SNICapturer) acquireCaptureHandle_afpacket() (*gopacket.PacketSource, error) {
+	return nil, fmt.Errorf("%w: AF_PACKET type not supported on darwin OS", errInvalidConfig)
 }
