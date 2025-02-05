@@ -240,7 +240,7 @@ func (p *prober) upgradeTls(ctx context.Context, signals chan Signal) {
 		return
 	}
 
-	log.Info("upgrading to tls")
+	log.Info("upgrading to tls", zap.String("sni-header", p.sni))
 	p.tlsConn = tls.Client(p.conn, &tls.Config{
 		InsecureSkipVerify: true, //nolint:gosec
 		ServerName:         p.sni,
