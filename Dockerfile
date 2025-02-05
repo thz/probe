@@ -9,8 +9,7 @@ RUN apt-get update && apt-get install -qq -y libpcap-dev
 ADD . /go/src/github.com/thz/probe
 WORKDIR /go/src/github.com/thz/probe
 
-ENV GOCACHE=/root/.cache/go-build
-RUN --mount=type=cache,target="/root/.cache/go-build" env CGO_ENABLED=1 go build -o probe ./cmd
+RUN env CGO_ENABLED=1 go build -o probe ./cmd
 
 FROM debian:bookworm-slim AS run-stage
 

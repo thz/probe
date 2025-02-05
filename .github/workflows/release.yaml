@@ -1,0 +1,220 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  linting:
+    strategy:
+      matrix:
+        go: [stable]
+        os: [ubuntu-latest, macos-latest]
+    name: lint
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install development libraries on ubuntu
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -qq -y libpcap-dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.60
+          only-new-issues: true
+  testing:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install development libraries
+      run: |
+        sudo apt-get update
+        sudo apt-get install -qq -y libpcap-dev
+
+    - name: go build
+      run: |
+        go build ./...
+
+  release:
+    needs: [testing,linting]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Draft Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: true
+          prerelease: false
+    outputs:
+      release_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+
+  publish-release:
+    needs: [cross-build-darwin,cross-build-linux,release,release-containers]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Add Test Report to Release
+      uses: irongut/EditRelease@v1.2.0
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        id: ${{ needs.release.outputs.release_id }}
+        draft: false
+
+  release-containers:
+    if: startsWith(github.ref, 'refs/tags')
+    needs: [release]
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: prepare version strings
+        env:
+          DOCKERHUB_ORG: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          echo DOCKERHUB_REPOSITORY=${DOCKERHUB_ORG}/${GITHUB_REPOSITORY#*/} >> $GITHUB_ENV
+          echo VERSION_TAG=${GITHUB_REF#$"refs/tags/v"} >> $GITHUB_ENV
+
+      - name: Print Version
+        run: |
+          echo "Version: $VERSION_TAG"
+          echo "Dockerhub Repository: $DOCKERHUB_REPOSITORY"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          cache-image: true
+          platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          registry: https://index.docker.io/v1/
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: |
+            ${{env.DOCKERHUB_REPOSITORY}}:${{env.VERSION_TAG}}
+            ${{env.DOCKERHUB_REPOSITORY}}:latest
+            ghcr.io/${{ github.repository }}:${{env.VERSION_TAG}}
+            ghcr.io/${{ github.repository }}:latest
+          build-args: |
+            ${{steps.version_step.outputs.version}}
+
+
+  cross-build-darwin:
+    needs: [release]
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        os: [darwin]
+        arch: [amd64, arm64]
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version: 1.23
+    - name: go build
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+        CGO_ENABLED: 1
+      run: |
+        go build -o ./build/probe-${{ matrix.os }}-${{ matrix.arch }} ./cmd
+    - name: list result
+      run: ls -la ./build
+    - name: Upload Release Asset
+      id: upload-release-asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.release.outputs.release_url }}
+        asset_path: ./build/probe-${{ matrix.os }}-${{ matrix.arch }}
+        asset_name: probe-${{ matrix.os }}-${{ matrix.arch }}
+        asset_content_type: application/octet-stream
+
+  cross-build-linux:
+    needs: [release]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux]
+        arch: [amd64, arm64]
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+    - name: run build in crossbuild container
+      uses: addnab/docker-run-action@v3
+      with:
+        image: docker.elastic.co/beats-dev/golang-crossbuild:1.23.4-${{matrix.arch=='amd64'&&'main-debian12'||''}}${{matrix.arch=='arm64'&&'arm'||''}}
+        options: -v ${{ github.workspace }}:/src -w /src -e GOOS=${{ matrix.os }} -e GOARCH=${{ matrix.arch }} -e CGO_ENABLED=1 -e GO
+        run: |
+          apt-get update && apt-get install -y git
+
+          mkdir /deps
+          cd /deps
+          curl -JLO https://www.tcpdump.org/release/libpcap-1.10.5.tar.xz
+          tar -xf libpcap-1.10.5.tar.xz
+          cd libpcap-1.10.5
+
+          if [ $(uname -m) = "x86_64" -a "${{matrix.arch}}" = "arm64" ]; then
+            flags="--host=aarch64-unknown-linux-gnu"
+          fi
+
+          /crossbuild -p ${{matrix.os}}/${{matrix.arch}} --build-cmd "./configure --disable-shared --prefix=/usr $flags && make && make install"
+          find /usr/lib -name 'libpcap*' -ls
+          find /usr/include -name 'pcap*' -ls
+
+          cd /src
+          mkdir assets
+          git config --global --add safe.directory /src
+          /crossbuild -p ${{matrix.os}}/${{matrix.arch}} --build-cmd "go build -o ./assets/probe-${{matrix.os}}-${{matrix.arch}} ./cmd"
+          ls -l ./assets
+    - name: list result
+      run: ls -la ./assets/probe-${{matrix.os}}-${{matrix.arch}}
+    - name: Upload Release Asset
+      id: upload-release-asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.release.outputs.release_url }}
+        asset_path: ./assets/probe-${{ matrix.os }}-${{ matrix.arch }}
+        asset_name: probe-${{ matrix.os }}-${{ matrix.arch }}
+        asset_content_type: application/octet-stream
