@@ -1,0 +1,98 @@
+name: verify
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+  # Optional: allow read access to pull request. Use with `only-new-issues` option.
+  pull-requests: read
+  checks: write
+
+jobs:
+  linting:
+    strategy:
+      matrix:
+        go: [stable]
+        os: [ubuntu-latest, macos-latest]
+    name: lint
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install development libraries on ubuntu
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -qq -y libpcap-dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.60
+          only-new-issues: true
+
+  cross-build-darwin:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        os: [darwin]
+        arch: [amd64, arm64]
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version: 1.23
+    - name: go build
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+        CGO_ENABLED: 1
+      run: |
+        go build -o build/probe-${{ matrix.os }}-${{ matrix.arch }} ./cmd
+    - name: list result
+      run: ls -la build
+
+  cross-build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux]
+        arch: [amd64, arm64]
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+    - name: run build in crossbuild container
+      uses: addnab/docker-run-action@v3
+      with:
+        image: docker.elastic.co/beats-dev/golang-crossbuild:1.23.4-${{matrix.arch=='amd64'&&'main-debian12'||''}}${{matrix.arch=='arm64'&&'arm'||''}}
+        options: -v ${{ github.workspace }}:/src -w /src -e GOOS=${{ matrix.os }} -e GOARCH=${{ matrix.arch }} -e CGO_ENABLED=1 -e GO
+        run: |
+          apt-get update && apt-get install -y git
+
+          mkdir /deps
+          cd /deps
+          curl -JLO https://www.tcpdump.org/release/libpcap-1.10.5.tar.xz
+          tar -xf libpcap-1.10.5.tar.xz
+          cd libpcap-1.10.5
+
+          if [ $(uname -m) = "x86_64" -a "${{matrix.arch}}" = "arm64" ]; then
+            flags="--host=aarch64-unknown-linux-gnu"
+          fi
+
+          /crossbuild -p ${{matrix.os}}/${{matrix.arch}} --build-cmd "./configure --prefix=/usr $flags && make && make install"
+          find /usr -name 'libpcap*' -ls
+          find /usr/include -name 'pcap*' -ls
+
+          cd /src
+          mkdir assets
+          git config --global --add safe.directory /src
+          /crossbuild -p ${{matrix.os}}/${{matrix.arch}} --build-cmd "go build -o ./assets/probe-${{matrix.os}}-${{matrix.arch}} ./cmd"
+          ls -l ./assets
+    - name: list result
+      run: ls -la ./assets/probe-${{matrix.os}}-${{matrix.arch}}
