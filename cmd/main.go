@@ -17,8 +17,6 @@ package main
 import (
 	"fmt"
 	"os"
-
-	"github.com/spf13/cobra"
 )
 
 func usage() {
@@ -35,10 +33,7 @@ The focus of that verbosity is DNS, TCP, TLS, SNI, ProxyProtocol.
 }
 
 func main() {
-	rootCmd := &cobra.Command{
-		Use:   "probe",
-		Short: `A tool to diagnose (probe, capture) TLS/TCP traffic.`,
-	}
+	rootCmd := probeCmd()
 
 	rootCmd.AddCommand(probeCmd())
 	rootCmd.AddCommand(captureCmd())
