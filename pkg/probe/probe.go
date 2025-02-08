@@ -59,6 +59,8 @@ type Signal struct {
 	TLSVersion        string
 }
 
+var errTLSFailure = fmt.Errorf("TLS failure")
+
 func (s Signal) String() string {
 	parts := []string{s.Path}
 	if s.Error != nil {
@@ -400,7 +402,7 @@ func (p *prober) resolve(ctx context.Context) {
 func (p *prober) verifyCerts(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	// get certificate details from raw certs
 	if len(rawCerts) == 0 {
-		return fmt.Errorf("no certificates")
+		return fmt.Errorf("%w: no certificates", errTLSFailure)
 	}
 
 	// first one is the subject, remainder is the chain
