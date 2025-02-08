@@ -61,20 +61,9 @@ jobs:
       release_url: ${{ steps.create_release.outputs.upload_url }}
       release_id: ${{ steps.create_release.outputs.id }}
 
-  publish-release:
-    needs: [cross-build-darwin,cross-build-linux,release,release-containers]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Add Test Report to Release
-      uses: irongut/EditRelease@v1.2.0
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        id: ${{ needs.release.outputs.release_id }}
-        draft: false
-
   release-containers:
     if: startsWith(github.ref, 'refs/tags')
-    needs: [release]
+    needs: [release,cross-build-linux,cross-build-darwin]
     permissions:
       packages: write
       contents: read
@@ -120,11 +109,21 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
+      - name: fetch assets
+        uses: actions/download-artifact@v4
+        with:
+          path: ./assets
+          pattern: 'probe-*'
+          merge-multiple: true
+      - name: list assets
+        run: ls -Rla ./assets/
+
       - name: Build and push
         id: docker_build
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./Dockerfile.nobuild
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           tags: |
@@ -158,6 +157,11 @@ jobs:
         go build -o ./build/probe-${{ matrix.os }}-${{ matrix.arch }} ./cmd
     - name: list result
       run: ls -la ./build
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: probe-${{ matrix.os }}-${{ matrix.arch }}
+        path: ./assets/probe-${{ matrix.os }}-${{ matrix.arch }}
     - name: Upload Release Asset
       id: upload-release-asset
       uses: actions/upload-release-asset@v1
@@ -175,14 +179,14 @@ jobs:
     strategy:
       matrix:
         os: [linux]
-        arch: [amd64, arm64]
+        arch: [amd64, arm64, armv7]
     steps:
     - name: checkout
       uses: actions/checkout@v4
     - name: run build in crossbuild container
       uses: addnab/docker-run-action@v3
       with:
-        image: docker.elastic.co/beats-dev/golang-crossbuild:1.23.4-${{matrix.arch=='amd64'&&'main-debian12'||''}}${{matrix.arch=='arm64'&&'arm'||''}}
+        image: docker.elastic.co/beats-dev/golang-crossbuild:1.23.4-${{matrix.arch=='amd64'&&'main-debian12'||''}}${{matrix.arch=='arm64'&&'arm'||''}}${{matrix.arch=='armv7'&&'armhf'||''}}
         options: -v ${{ github.workspace }}:/src -w /src -e GOOS=${{ matrix.os }} -e GOARCH=${{ matrix.arch }} -e CGO_ENABLED=1 -e GO
         run: |
           apt-get update && apt-get install -y git
@@ -196,10 +200,14 @@ jobs:
           if [ $(uname -m) = "x86_64" -a "${{matrix.arch}}" = "arm64" ]; then
             flags="--host=aarch64-unknown-linux-gnu"
           fi
+          if [ $(uname -m) = "x86_64" -a "${{matrix.arch}}" = "armv7" ]; then
+            flags="--host=arm-unknown-linux-gnu"
+          fi
 
           /crossbuild -p ${{matrix.os}}/${{matrix.arch}} --build-cmd "./configure --disable-shared --prefix=/usr $flags && make && make install"
           find /usr/lib -name 'libpcap*' -ls
           find /usr/include -name 'pcap*' -ls
+          ls -l /usr/include/pcap.h
 
           cd /src
           mkdir assets
@@ -208,6 +216,11 @@ jobs:
           ls -l ./assets
     - name: list result
       run: ls -la ./assets/probe-${{matrix.os}}-${{matrix.arch}}
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: probe-${{ matrix.os }}-${{ matrix.arch }}
+        path: ./assets/probe-${{ matrix.os }}-${{ matrix.arch }}
     - name: Upload Release Asset
       id: upload-release-asset
       uses: actions/upload-release-asset@v1
@@ -218,3 +231,15 @@ jobs:
         asset_path: ./assets/probe-${{ matrix.os }}-${{ matrix.arch }}
         asset_name: probe-${{ matrix.os }}-${{ matrix.arch }}
         asset_content_type: application/octet-stream
+
+  publish-release:
+    needs: [cross-build-darwin,cross-build-linux,release,release-containers]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Add Test Report to Release
+      uses: irongut/EditRelease@v1.2.0
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        id: ${{ needs.release.outputs.release_id }}
+        draft: false
+

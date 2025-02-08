@@ -63,14 +63,14 @@ jobs:
     strategy:
       matrix:
         os: [linux]
-        arch: [amd64, arm64]
+        arch: [amd64, arm64, armv7]
     steps:
     - name: checkout
       uses: actions/checkout@v4
     - name: run build in crossbuild container
       uses: addnab/docker-run-action@v3
       with:
-        image: docker.elastic.co/beats-dev/golang-crossbuild:1.23.4-${{matrix.arch=='amd64'&&'main-debian12'||''}}${{matrix.arch=='arm64'&&'arm'||''}}
+        image: docker.elastic.co/beats-dev/golang-crossbuild:1.23.4-${{matrix.arch=='amd64'&&'main-debian12'||''}}${{matrix.arch=='arm64'&&'arm'||''}}${{matrix.arch=='armv7'&&'armhf'||''}}
         options: -v ${{ github.workspace }}:/src -w /src -e GOOS=${{ matrix.os }} -e GOARCH=${{ matrix.arch }} -e CGO_ENABLED=1 -e GO
         run: |
           apt-get update && apt-get install -y git
@@ -84,10 +84,14 @@ jobs:
           if [ $(uname -m) = "x86_64" -a "${{matrix.arch}}" = "arm64" ]; then
             flags="--host=aarch64-unknown-linux-gnu"
           fi
+          if [ $(uname -m) = "x86_64" -a "${{matrix.arch}}" = "armv7" ]; then
+            flags="--host=arm-unknown-linux-gnu"
+          fi
 
           /crossbuild -p ${{matrix.os}}/${{matrix.arch}} --build-cmd "./configure --prefix=/usr $flags && make && make install"
           find /usr -name 'libpcap*' -ls
           find /usr/include -name 'pcap*' -ls
+          ls -l /usr/include/pcap.h
 
           cd /src
           mkdir assets
@@ -95,4 +99,6 @@ jobs:
           /crossbuild -p ${{matrix.os}}/${{matrix.arch}} --build-cmd "go build -o ./assets/probe-${{matrix.os}}-${{matrix.arch}} ./cmd"
           ls -l ./assets
     - name: list result
-      run: ls -la ./assets/probe-${{matrix.os}}-${{matrix.arch}}
+      run: |
+        ls -laR ./assets/
+        ls -la ./assets/probe-${{matrix.os}}-${{matrix.arch}}
