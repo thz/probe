@@ -9,7 +9,8 @@ test:
 .PHONY: all
 all: probe probe-linux-amd64 probe-linux-arm64
 
-probe:
+sources = $(shell find . -name '*.go')
+probe: $(sources)
 	go build -o $@ ./cmd
 
 probe-linux-amd64:

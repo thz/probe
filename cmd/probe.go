@@ -39,12 +39,18 @@ var (
 
 func probeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "probe [--verbose] [--proxy-protocol-v1|--proxy-protocol-v2] [--sni server-name] endpoint",
-		Short: "Probe a given endpoint",
-		Long: `Probe will open a TLS connection to an endpoint.
-It will report details on DNS resolving (chain of CNAMEs / A records).
-The command also supports sending proxy protocol headers (v1/v2) and
-setting the SNI (Server Name Indication) for the TLS handshake.`,
+		Use:   "probe endpoint:port",
+		Args:  cobra.ExactArgs(1),
+		Short: "Probe a given endpoint (host:port)",
+		Long: `Probe takes an endpoint in the form host:port as argument.
+
+It will resolve the specified host, open a TCP connection,
+and upgrade the connection TLS by performing a TLS handshake.
+It will report details on DNS resolving (chain of CNAMEs / A records) and
+about the observed server's certificate.
+Optionally proxy protocol headers (v1/v2) are sent before the TLS handshake.
+An explicit SNI (Server Name Indication) can be provided, which is then
+used instead of the literal endpoint host name.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return fmt.Errorf("%w: no endpoint provided", errInvalidArgument)
