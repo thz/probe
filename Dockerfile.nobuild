@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -qq -y \
 
 COPY ./assets ./assets
 
-RUN echo "install -v -o 0 -g 0 -m 0755 ./assets/probe-$TARGETPLATFORM /usr/bin/probe" | sed 's,linux/,linux-,' > install-asset
+RUN echo "install -v -o 0 -g 0 -m 0755 ./assets/probe-$TARGETPLATFORM /usr/bin/probe" | sed 's,linux/,linux-,;s,arm/v7,armv7,' > install-asset
 RUN . ./install-asset
 RUN rm -r ./assets
 

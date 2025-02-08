@@ -186,7 +186,7 @@ jobs:
     - name: run build in crossbuild container
       uses: addnab/docker-run-action@v3
       with:
-        image: docker.elastic.co/beats-dev/golang-crossbuild:1.23.4-${{matrix.arch=='amd64'&&'main-debian12'||''}}${{matrix.arch=='arm64'&&'arm'||''}}
+        image: docker.elastic.co/beats-dev/golang-crossbuild:1.23.4-${{matrix.arch=='amd64'&&'main-debian12'||''}}${{matrix.arch=='arm64'&&'arm'||''}}${{matrix.arch=='armv7'&&'armhf'||''}}
         options: -v ${{ github.workspace }}:/src -w /src -e GOOS=${{ matrix.os }} -e GOARCH=${{ matrix.arch }} -e CGO_ENABLED=1 -e GO
         run: |
           apt-get update && apt-get install -y git
@@ -207,6 +207,7 @@ jobs:
           /crossbuild -p ${{matrix.os}}/${{matrix.arch}} --build-cmd "./configure --disable-shared --prefix=/usr $flags && make && make install"
           find /usr/lib -name 'libpcap*' -ls
           find /usr/include -name 'pcap*' -ls
+          ls -l /usr/include/pcap.h
 
           cd /src
           mkdir assets
