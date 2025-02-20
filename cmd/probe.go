@@ -26,9 +26,10 @@ import (
 )
 
 type probeOptions struct {
-	verbose    bool
-	ppv1, ppv2 bool
-	sni        string
+	verbose         bool
+	showCertDetails bool
+	ppv1, ppv2      bool
+	sni             string
 }
 
 var probeOpts probeOptions
@@ -72,6 +73,9 @@ used instead of the literal endpoint host name.`,
 			if probeOpts.sni != "" {
 				proberOptions.ServerNameIndication = probeOpts.sni
 			}
+			if probeOpts.showCertDetails {
+				proberOptions.PrintCertDetails = true
+			}
 			prober, err := probe.NewProber(proberOptions)
 
 			if err != nil {
@@ -98,6 +102,7 @@ used instead of the literal endpoint host name.`,
 	}
 
 	cmd.Flags().BoolVar(&probeOpts.verbose, "verbose", false, "be verbose, output logs")
+	cmd.Flags().BoolVar(&probeOpts.showCertDetails, "cert-details", false, "show certificate details (SANs, validity)")
 	cmd.Flags().BoolVar(&probeOpts.ppv1, "proxy-protocol-v1", false, "send proxy protocol v1 headers")
 	cmd.Flags().BoolVar(&probeOpts.ppv2, "proxy-protocol-v2", false, "send proxy protocol v2 headers")
 	cmd.Flags().StringVar(&probeOpts.sni, "sni", "", "set SNI for TLS handshake (defaults to endpoint host)")

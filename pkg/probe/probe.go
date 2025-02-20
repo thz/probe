@@ -43,6 +43,7 @@ type ProbeOptions struct {
 	Endpoint             string
 	ProxyProtocolMode    ProxyProtocolMode
 	ServerNameIndication string
+	PrintCertDetails     bool
 }
 
 type Signal struct {
@@ -61,7 +62,13 @@ type Signal struct {
 
 var errTLSFailure = fmt.Errorf("TLS failure")
 
+func (s Signal) DetailedString() string {
+	return s.stringer(true)
+}
 func (s Signal) String() string {
+	return s.stringer(false)
+}
+func (s Signal) stringer(printCertDetails bool) string {
 	parts := []string{s.Path}
 	if s.Error != nil {
 		parts = append(parts, "ERROR=\""+s.Error.Error()+"\"")
@@ -81,14 +88,14 @@ func (s Signal) String() string {
 	if s.PeerSubject != "" {
 		parts = append(parts, "peer-subject="+s.PeerSubject)
 	}
-	if len(s.SANs) > 0 {
+	if len(s.SANs) > 0 && printCertDetails {
 		parts = append(parts, "SANs="+strings.Join(s.SANs, ","))
 	}
 
-	if !s.ValidityNotBefore.IsZero() {
+	if !s.ValidityNotBefore.IsZero() && printCertDetails {
 		parts = append(parts, "validity-not-before="+s.ValidityNotBefore.Format(time.RFC3339))
 	}
-	if !s.ValidityNotAfter.IsZero() {
+	if !s.ValidityNotAfter.IsZero() && printCertDetails {
 		parts = append(parts, "validity-not-after="+s.ValidityNotAfter.Format(time.RFC3339))
 	}
 
@@ -108,6 +115,7 @@ type prober struct {
 	proxyProtocolMode ProxyProtocolMode
 	sni               string
 	signals           chan Signal
+	printCertDetails  bool
 }
 
 func NewProber(o ProbeOptions) (*prober, error) {
@@ -115,6 +123,7 @@ func NewProber(o ProbeOptions) (*prober, error) {
 		endpoint:          o.Endpoint,
 		proxyProtocolMode: o.ProxyProtocolMode,
 		sni:               o.ServerNameIndication,
+		printCertDetails:  o.PrintCertDetails,
 	}
 	var err error
 	p.fqdn, p.port, err = net.SplitHostPort(p.endpoint)
@@ -130,6 +139,7 @@ func NewProber(o ProbeOptions) (*prober, error) {
 }
 
 func (p *prober) Probe(ctx context.Context) error {
+	// TODO: implement Probe function which exposes the signal channel
 	log := util.CtxLogOrPanic(ctx)
 	defer log.Sync()
 	p.signals = make(chan Signal)
@@ -141,9 +151,9 @@ func (p *prober) Probe(ctx context.Context) error {
 		for signal := range signals {
 			if signal.Error != nil {
 				fmt.Printf("%s FAILED: %v\n", signal.Path, signal.Error)
-			} else {
-				fmt.Printf("%s\n", signal)
+				continue
 			}
+			fmt.Printf("%s\n", signal.stringer(p.printCertDetails))
 		}
 	}(ctx, p.signals)
 
