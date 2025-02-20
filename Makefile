@@ -1,9 +1,8 @@
 .PHONY: default
-default: lint test
+default: probe test
 
 .PHONY: test
-test:
-	nice go build -o probe ./cmd/probe
+test: probe
 	./probe probe google.com:443
 
 .PHONY: all

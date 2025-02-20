@@ -12,6 +12,26 @@ I prefered `drill` (similar to `dig`) to check DNS resolving, `telnet` to check 
 
 To smoothen the process, I wrote `thz/probe` to do all these checks in one go and provide exactly the relevant details for every step.
 
+## Install / Get it
+
+Download the latest binary from the GitHub release page: https://github.com/thz/probe/releases/latest
+
+Alternatively, you can:
+```
+# build it yourself (without cloning)
+GOBIN=$(pwd) go install github.com/thz/probe/cmd/probe@latest
+./probe google.com:443
+
+# build it yourself
+git clone https://github.com/thz/probe
+cd probe
+make probe test
+
+# use docker
+docker pull thzpub/probe # optional
+docker run --rm -ti thzpub/probe google.com:443
+```
+
 ## Probe Usage
 
 ```
