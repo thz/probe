@@ -1,9 +1,8 @@
 .PHONY: default
-default: lint test
+default: probe test
 
 .PHONY: test
-test:
-	nice go build -o probe ./cmd
+test: probe
 	./probe probe google.com:443
 
 .PHONY: all
@@ -11,13 +10,13 @@ all: probe probe-linux-amd64 probe-linux-arm64
 
 sources = $(shell find . -name '*.go')
 probe: $(sources)
-	go build -o $@ ./cmd
+	go build -o $@ ./cmd/probe
 
 probe-linux-amd64:
-	GOARCH=amd64 GOOS=linux go build -o $@ ./cmd
+	GOARCH=amd64 GOOS=linux go build -o $@ ./cmd/probe
 
 probe-linux-arm64:
-	GOARCH=arm64 GOOS=linux go build -o $@ ./cmd
+	GOARCH=arm64 GOOS=linux go build -o $@ ./cmd/probe
 
 .PHONY: lint
 lint:

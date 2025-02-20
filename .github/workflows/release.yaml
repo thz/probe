@@ -154,7 +154,7 @@ jobs:
         GOARCH: ${{ matrix.arch }}
         CGO_ENABLED: 1
       run: |
-        go build -o ./build/probe-${{ matrix.os }}-${{ matrix.arch }} ./cmd
+        go build -o ./build/probe-${{ matrix.os }}-${{ matrix.arch }} ./cmd/probe
     - name: list result
       run: ls -la ./build
     - name: Upload Artifact
@@ -212,7 +212,7 @@ jobs:
           cd /src
           mkdir assets
           git config --global --add safe.directory /src
-          /crossbuild -p ${{matrix.os}}/${{matrix.arch}} --build-cmd "go build -o ./assets/probe-${{matrix.os}}-${{matrix.arch}} ./cmd"
+          /crossbuild -p ${{matrix.os}}/${{matrix.arch}} --build-cmd "go build -o ./assets/probe-${{matrix.os}}-${{matrix.arch}} ./cmd/probe"
           ls -l ./assets
     - name: list result
       run: ls -la ./assets/probe-${{matrix.os}}-${{matrix.arch}}
