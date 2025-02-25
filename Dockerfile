@@ -16,13 +16,22 @@ FROM debian:bookworm-slim AS run-stage
 
 # make the container slightly more useful for diagostics
 RUN apt-get update && apt-get install -qq -y \
+	bpftrace \
+	conntrack \
+	curl \
+	ethtool \
+	htop \
 	inetutils-telnet \
+	iperf3 \
 	iproute2 \
 	iptables \
 	iputils-ping \
 	ldnsutils \
+	less \
+	lsof \
 	openssl \
 	socat \
+	strace \
 	tcpdump
 
 COPY --from=build-stage /go/src/github.com/thz/probe/probe /usr/bin/probe
