@@ -1,5 +1,13 @@
 # thz/probe -- Probe TCP/TLS endpoints
 
+## What is this?
+
+ - a tool to diagnose TCP/TLS connections
+ - a tool to probe TCP/TLS endpoints (`probe probe`)
+ - a tool to observe incoming TCP/TLS connections (`probe capture`)
+
+Next to DNS and certificate details, SNI headers and proxy protocol headers (v1 and v2) are verbosley sent and received.
+
 ## Why this tool?
 
 To diagnose a failing TLS connection to foo.example.com:12345, I used to:
@@ -12,7 +20,7 @@ I prefered `drill` (similar to `dig`) to check DNS resolving, `telnet` to check 
 
 To smoothen the process, I wrote `thz/probe` to do all these checks in one go and provide exactly the relevant details for every step.
 
-## Install / Get it
+## How to Get/Install it
 
 Download the latest binary from the GitHub release page: https://github.com/thz/probe/releases/latest
 
@@ -70,8 +78,33 @@ This will send a PROXY protocol header after successful TCP connection establish
 
 ## Capture Usage
 
-The capture command will listen on a network interface and print details about observed TCP connections.
+The capture command will listen on a network interface and print details about observed TCP connections. It is not a general purpose packet sniffer, but rather a tool to show specific details about TCP/TLS connections (SNI header, proxy protocol header, TLS certificate peer).
+The flag `--iface` is used to specify the network interface to listen on. The flag `--bpf` can be used to filter the to-be-observed packets.
+
+### Example: A Regular HTTPS Request
+
+The `capture` subcommand can be used to observe the actual TLS server name (SNI HEADER) used during the TLS handshake:
 
 ```
+% curl https://github.com
+
+# capture command:
 % ./probe capture --iface eth0 --bpf "dst port 443"
+TLS_CLIENT_HELLO FlowID='192.168.178.26:42942 -> 140.82.121.4:443' TLSServerName='github.com'
+```
+
+### Example: Probe with Explicit SNI Header
+
+The `--sni` flag of the `probe` subcommand allows specification of the TLS server name (SNI HEADER), which may differ from the hostname used to establish the TCP connection:
+
+```
+% probe --sni probing.example.com 1.1.1.1:443
+RESOLVE/IP-LITERAL 1.1.1.1
+TCP/ESTABLISHED local=192.168.178.26:45930 peer=1.1.1.1:443
+TLS/CERTIFICATE peer-subject=CN=cloudflare-dns.com,O=Cloudflare\, Inc.,L=San Francisco,ST=California,C=US
+TLS/ESTABLISHED tls-version=TLS1.3
+
+# capture command:
+% ./probe capture --iface eth0 --bpf "dst port 443"
+TLS_CLIENT_HELLO FlowID='192.168.178.26:45930 -> 1.1.1.1:443' TLSServerName='probing.example.com'
 ```
